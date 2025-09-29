@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, AlertCircle } from 'lucide-react';
+import { Send, User, Bot, AlertCircle, CheckCircle } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import { getFloatChatResponse } from '../utils/getFloatChatResponse';
 
@@ -79,9 +79,13 @@ const ChatInterface = () => {
     }
   };
 
-  const hasApiKey = import.meta.env.VITE_OPENAI_API_KEY && 
-                   import.meta.env.VITE_OPENAI_API_KEY !== 'undefined' && 
-                   import.meta.env.VITE_OPENAI_API_KEY.startsWith('sk-');
+  // Check API key status
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  const hasValidApiKey = apiKey && 
+                        apiKey !== 'undefined' && 
+                        apiKey !== 'null' &&
+                        apiKey.trim().length > 0 &&
+                        apiKey.startsWith('sk-');
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -93,18 +97,33 @@ const ChatInterface = () => {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">FloatChat</h2>
               <p className="text-sm text-gray-500">
-                {hasApiKey ? 'AI-Powered Assistant' : 'Basic Mode'}
+                {hasValidApiKey ? 'AI-Powered Assistant' : 'Basic Mode'}
               </p>
             </div>
           </div>
           
-          {!hasApiKey && (
-            <div className="flex items-center text-amber-600">
-              <AlertCircle className="w-4 h-4 mr-1" />
-              <span className="text-xs">API Key Required</span>
-            </div>
-          )}
+          <div className="flex items-center space-x-2">
+            {hasValidApiKey ? (
+              <div className="flex items-center text-green-600">
+                <CheckCircle className="w-4 h-4 mr-1" />
+                <span className="text-xs">AI Ready</span>
+              </div>
+            ) : (
+              <div className="flex items-center text-amber-600">
+                <AlertCircle className="w-4 h-4 mr-1" />
+                <span className="text-xs">Basic Mode</span>
+              </div>
+            )}
+          </div>
         </div>
+        
+        {/* Debug info in development */}
+        {import.meta.env.DEV && (
+          <div className="mt-2 text-xs text-gray-400 font-mono">
+            Mode: {import.meta.env.MODE} | 
+            API Key: {apiKey ? `${apiKey.substring(0, 7)}...` : 'Not set'}
+          </div>
+        )}
       </div>
 
       {/* Messages Container */}
