@@ -30,27 +30,32 @@ Your capabilities include:
 If you don't know something, be honest about it and suggest alternatives when possible.`;
 
 export const getFloatChatResponse = async (message, conversationHistory = []) => {
-  // Quick response for empty messages
-  if (!message.trim()) {
+  // Safely handle message input
+  if (!message || typeof message !== 'string' || !message.trim()) {
     return "I didn't catch that. What would you like to talk about?";
   }
 
   // Check if API key is available
-  if (!OPENAI_API_KEY) {
+  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'undefined') {
     console.warn('OpenAI API key not found. Using fallback responses.');
     return getFallbackResponse(message);
   }
 
   try {
-    // Prepare conversation context (last 6 messages for efficiency)
-    const recentHistory = conversationHistory.slice(-6);
+    // Safely prepare conversation context (last 6 messages for efficiency)
+    const recentHistory = Array.isArray(conversationHistory) 
+      ? conversationHistory.slice(-6) 
+      : [];
+    
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...recentHistory.map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.text
-      })),
-      { role: 'user', content: message }
+      ...recentHistory
+        .filter(msg => msg && msg.text && msg.sender) // Filter out invalid messages
+        .map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: String(msg.text).trim()
+        })),
+      { role: 'user', content: String(message).trim() }
     ];
 
     const response = await fetch(API_URL, {
@@ -70,13 +75,13 @@ export const getFloatChatResponse = async (message, conversationHistory = []) =>
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status}`);
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      return data.choices[0].message.content.trim();
+    if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+      return String(data.choices[0].message.content).trim();
     } else {
       throw new Error('Unexpected API response format');
     }
@@ -99,7 +104,12 @@ export const getFloatChatResponse = async (message, conversationHistory = []) =>
 
 // Fallback function for when API is unavailable
 function getFallbackResponse(message) {
-  const userMessage = message.toLowerCase().trim();
+  // Safely handle message input
+  if (!message || typeof message !== 'string') {
+    return fallbackResponses.greeting;
+  }
+
+  const userMessage = String(message).toLowerCase().trim();
   
   // Basic pattern matching for common queries
   if (userMessage.includes('hello') || userMessage.includes('hi') || userMessage.includes('hey')) {
@@ -118,6 +128,14 @@ function getFallbackResponse(message) {
   if (userMessage.includes('help') || userMessage.includes('what can you do')) {
     return "I'm currently in offline mode, but I can still help with basic math, tell you the time, and have simple conversations. My full AI capabilities will return soon!";
   }
+
+  if (userMessage.includes('thank') || userMessage.includes('thanks')) {
+    return "You're welcome! Happy to help however I can.";
+  }
+
+  if (userMessage.includes('bye') || userMessage.includes('goodbye')) {
+    return "Goodbye! Thanks for chatting with FloatChat.";
+  }
   
   // Default fallback
   return "I'm running in basic mode right now. Try asking me about math, the time, or just say hello! My full AI capabilities will be back soon.";
@@ -126,26 +144,39 @@ function getFallbackResponse(message) {
 // Basic math handler for fallback mode
 function handleBasicMath(message) {
   try {
+    if (!message || typeof message !== 'string') {
+      return "I can help with basic math operations. Try something like '15 + 25' or '10 * 3'.";
+    }
+
     const mathPattern = /(\d+(?:\.\d+)?)\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?)/;
-    const match = message.match(mathPattern);
+    const match = String(message).match(mathPattern);
     
     if (match) {
       const [_, num1, operator, num2] = match;
       const a = parseFloat(num1);
       const b = parseFloat(num2);
+      
+      if (isNaN(a) || isNaN(b)) {
+        return "I need valid numbers to calculate. Try '15 + 25' or '10 * 3'.";
+      }
+      
       let result;
       
       switch (operator) {
         case '+': result = a + b; break;
         case '-': result = a - b; break;
         case '*': result = a * b; break;
-        case '/': result = b !== 0 ? a / b : 'Cannot divide by zero'; break;
+        case '/': 
+          if (b === 0) return 'Cannot divide by zero!';
+          result = a / b; 
+          break;
         default: return "I can help with basic math: +, -, *, /";
       }
       
       return `${a} ${operator} ${b} = ${result}`;
     }
   } catch (error) {
+    console.error('Math calculation error:', error);
     return "I can help with basic calculations like: 15 + 25, 10 * 3, etc.";
   }
   

@@ -7,7 +7,7 @@ const ChatInterface = () => {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Hello! I'm FloatChat, your AI assistant powered by OpenAI. I can help with questions, calculations, programming, and much more. What would you like to chat about?",
+      text: "Hello! I'm FloatChat, your AI assistant. I can help with questions, calculations, programming, and much more. What would you like to chat about?",
       sender: 'bot',
       timestamp: new Date().toLocaleTimeString()
     }
@@ -28,35 +28,43 @@ const ChatInterface = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim() || isTyping) return;
+    
+    // Validate input
+    if (!inputMessage || typeof inputMessage !== 'string' || !inputMessage.trim() || isTyping) {
+      return;
+    }
 
     const userMessage = {
       id: Date.now(),
-      text: inputMessage,
+      text: inputMessage.trim(),
       sender: 'user',
       timestamp: new Date().toLocaleTimeString()
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = inputMessage.trim();
     setInputMessage('');
     setIsTyping(true);
     setError(null);
 
     try {
       // Get AI response
-      const botResponse = await getFloatChatResponse(inputMessage, messages);
+      const botResponse = await getFloatChatResponse(currentInput, messages);
       
-      const botMessage = {
-        id: Date.now() + 1,
-        text: botResponse,
-        sender: 'bot',
-        timestamp: new Date().toLocaleTimeString()
-      };
+      if (botResponse && typeof botResponse === 'string') {
+        const botMessage = {
+          id: Date.now() + 1,
+          text: botResponse.trim(),
+          sender: 'bot',
+          timestamp: new Date().toLocaleTimeString()
+        };
 
-      setMessages(prev => [...prev, botMessage]);
+        setMessages(prev => [...prev, botMessage]);
+      } else {
+        throw new Error('Invalid response from AI');
+      }
     } catch (error) {
       console.error('Error getting response:', error);
-      setError('Sorry, I encountered an error. Please try again.');
       
       const errorMessage = {
         id: Date.now() + 1,
@@ -71,6 +79,10 @@ const ChatInterface = () => {
     }
   };
 
+  const hasApiKey = import.meta.env.VITE_OPENAI_API_KEY && 
+                   import.meta.env.VITE_OPENAI_API_KEY !== 'undefined' && 
+                   import.meta.env.VITE_OPENAI_API_KEY.startsWith('sk-');
+
   return (
     <div className="flex flex-col h-full bg-gray-50">
       {/* Chat Header */}
@@ -81,12 +93,12 @@ const ChatInterface = () => {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">FloatChat</h2>
               <p className="text-sm text-gray-500">
-                {import.meta.env.VITE_OPENAI_API_KEY ? 'AI-Powered Assistant' : 'Basic Mode'}
+                {hasApiKey ? 'AI-Powered Assistant' : 'Basic Mode'}
               </p>
             </div>
           </div>
           
-          {!import.meta.env.VITE_OPENAI_API_KEY && (
+          {!hasApiKey && (
             <div className="flex items-center text-amber-600">
               <AlertCircle className="w-4 h-4 mr-1" />
               <span className="text-xs">API Key Required</span>
@@ -114,12 +126,6 @@ const ChatInterface = () => {
           </div>
         )}
         
-        {error && (
-          <div className="text-red-600 text-sm text-center p-2 bg-red-50 rounded-lg">
-            {error}
-          </div>
-        )}
-        
         <div ref={messagesEndRef} />
       </div>
 
@@ -137,7 +143,7 @@ const ChatInterface = () => {
           />
           <button
             type="submit"
-            disabled={!inputMessage.trim() || isTyping}
+            disabled={!inputMessage?.trim() || isTyping}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
           >
             <Send className="w-4 h-4" />
