@@ -1,93 +1,151 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizonal, Loader2, Sparkles } from 'lucide-react';
-import ChatMessage from './ChatMessage.jsx';
-import GraphVisualizer from './GraphVisualizer.jsx';
-import MockMap from './MockMap.jsx';
-import { getFloatChatResponse } from '../utils/getFloatChatResponse.js';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, User, Bot, AlertCircle } from 'lucide-react';
+import ChatMessage from './ChatMessage';
+import { getFloatChatResponse } from '../utils/getFloatChatResponse';
 
-export default function ChatInterface({ mode }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [structuredBlock, setStructuredBlock] = useState(null);
-  const listRef = useRef(null);
-
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
+const ChatInterface = () => {
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      text: "Hello! I'm FloatChat, your AI assistant powered by OpenAI. I can help with questions, calculations, programming, and much more. What would you like to chat about?",
+      sender: 'bot',
+      timestamp: new Date().toLocaleTimeString()
     }
-  }, [messages, structuredBlock]);
+  ]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
-    // reset structured block when switching modes
-    setStructuredBlock(null);
-  }, [mode]);
+    scrollToBottom();
+  }, [messages]);
 
-  const submit = useCallback(async () => {
-    if (!input.trim()) return;
-    const prompt = input.trim();
-    setInput('');
-    setMessages(m => [...m, { id: crypto.randomUUID(), role: 'user', content: prompt }]);
-    setLoading(true);
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!inputMessage.trim() || isTyping) return;
+
+    const userMessage = {
+      id: Date.now(),
+      text: inputMessage,
+      sender: 'user',
+      timestamp: new Date().toLocaleTimeString()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputMessage('');
+    setIsTyping(true);
+    setError(null);
+
     try {
-      const res = await getFloatChatResponse({ mode, prompt });
-      if (res.type === 'text') {
-        setMessages(m => [...m, { id: crypto.randomUUID(), role: 'assistant', content: res.content }]);
-      } else {
-        setStructuredBlock(res);
-        setMessages(m => [...m, { id: crypto.randomUUID(), role: 'assistant', content: `${res.title}: ${res.description}` }]);
-      }
-    } catch (e) {
-      setMessages(m => [...m, { id: crypto.randomUUID(), role: 'assistant', content: 'Error: failed to generate response.' }]);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, mode]);
+      // Get AI response
+      const botResponse = await getFloatChatResponse(inputMessage, messages);
+      
+      const botMessage = {
+        id: Date.now() + 1,
+        text: botResponse,
+        sender: 'bot',
+        timestamp: new Date().toLocaleTimeString()
+      };
 
-  const handleKeyDown = e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submit();
+      setMessages(prev => [...prev, botMessage]);
+    } catch (error) {
+      console.error('Error getting response:', error);
+      setError('Sorry, I encountered an error. Please try again.');
+      
+      const errorMessage = {
+        id: Date.now() + 1,
+        text: "Sorry, I'm having trouble processing your request right now. Please try again!",
+        sender: 'bot',
+        timestamp: new Date().toLocaleTimeString()
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div ref={listRef} className="flex-1 overflow-y-auto space-y-6 p-6 pr-3">
-        {messages.length === 0 && (
-          <div className="mt-10 mx-auto max-w-md text-center text-slate-400 text-sm">
-            <Sparkles className="mx-auto mb-4 text-brand-500" />
-            <p className="leading-relaxed">Ask anything about ocean data. Try: "Explain El Niño impacts on Pacific thermocline" or switch modes for charts and geospatial exploration.</p>
+    <div className="flex flex-col h-full bg-gray-50">
+      {/* Chat Header */}
+      <div className="bg-white border-b border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Bot className="w-8 h-8 text-blue-600" />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">FloatChat</h2>
+              <p className="text-sm text-gray-500">
+                {import.meta.env.VITE_OPENAI_API_KEY ? 'AI-Powered Assistant' : 'Basic Mode'}
+              </p>
+            </div>
+          </div>
+          
+          {!import.meta.env.VITE_OPENAI_API_KEY && (
+            <div className="flex items-center text-amber-600">
+              <AlertCircle className="w-4 h-4 mr-1" />
+              <span className="text-xs">API Key Required</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Messages Container */}
+      <div className="flex-grow overflow-y-auto p-4 space-y-4">
+        {messages.map((message) => (
+          <ChatMessage key={message.id} message={message} />
+        ))}
+        
+        {isTyping && (
+          <div className="flex items-start space-x-3">
+            <Bot className="w-8 h-8 text-blue-600 mt-1" />
+            <div className="bg-white rounded-lg px-4 py-2 max-w-xs lg:max-w-md shadow-sm">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+              </div>
+            </div>
           </div>
         )}
-        {messages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
-        {structuredBlock?.type === 'visual' && <GraphVisualizer block={structuredBlock} />}
-        {structuredBlock?.type === 'deep' && <MockMap block={structuredBlock} />}
+        
+        {error && (
+          <div className="text-red-600 text-sm text-center p-2 bg-red-50 rounded-lg">
+            {error}
+          </div>
+        )}
+        
+        <div ref={messagesEndRef} />
       </div>
-      <div className="border-t border-slate-800/60 p-4">
-        <div className="flex gap-3 items-end">
-          <textarea
-            rows={1}
-            value={input}
-            onKeyDown={handleKeyDown}
-            onChange={e => setInput(e.target.value)}
-            placeholder={`Enter ${mode} query...`}
-            className="flex-1 resize-none rounded-xl bg-slate-800/70 border border-slate-700/60 focus:outline-none focus:ring-2 focus:ring-brand-500/50 px-4 py-3 text-sm shadow-inner placeholder-slate-500"
+
+      {/* Input Form */}
+      <div className="bg-white border-t border-gray-200 p-4">
+        <form onSubmit={handleSendMessage} className="flex space-x-3">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder={isTyping ? "AI is thinking..." : "Type your message..."}
+            className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+            disabled={isTyping}
           />
           <button
-            onClick={submit}
-            disabled={loading || !input.trim()}
-            className="h-11 px-5 rounded-xl font-medium text-sm flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-glow transition"
+            type="submit"
+            disabled={!inputMessage.trim() || isTyping}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
           >
-            {loading ? <Loader2 className="animate-spin" size={18} /> : <SendHorizonal size={18} />}
-            <span className="hidden sm:inline">Send</span>
+            <Send className="w-4 h-4" />
           </button>
-        </div>
-        <div className="mt-2 text-[10px] uppercase tracking-wide text-slate-500 flex gap-4">
-          <span>Mode: {mode}</span>
-          <span>Mock AI latency active</span>
-        </div>
+        </form>
       </div>
     </div>
   );
-}
+};
+
+export default ChatInterface;
