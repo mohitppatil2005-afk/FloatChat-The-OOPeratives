@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, AlertCircle, CheckCircle } from 'lucide-react';
+import { Send, Bot, AlertCircle, CheckCircle, Key } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import { getFloatChatResponse } from '../utils/getFloatChatResponse';
 
@@ -14,7 +14,6 @@ const ChatInterface = () => {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -29,15 +28,14 @@ const ChatInterface = () => {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     
-    // Validate input
-    if (!inputMessage || typeof inputMessage !== 'string' || !inputMessage.trim() || isTyping) {
+    if (!inputMessage || !inputMessage.trim() || isTyping) {
       return;
     }
 
     const userMessage = {
       id: Date.now(),
       text: inputMessage.trim(),
-      sender: 'user',
+      sender: 'user',  
       timestamp: new Date().toLocaleTimeString()
     };
 
@@ -45,10 +43,8 @@ const ChatInterface = () => {
     const currentInput = inputMessage.trim();
     setInputMessage('');
     setIsTyping(true);
-    setError(null);
 
     try {
-      // Get AI response
       const botResponse = await getFloatChatResponse(currentInput, messages);
       
       if (botResponse && typeof botResponse === 'string') {
@@ -61,14 +57,14 @@ const ChatInterface = () => {
 
         setMessages(prev => [...prev, botMessage]);
       } else {
-        throw new Error('Invalid response from AI');
+        throw new Error('Invalid response');
       }
     } catch (error) {
       console.error('Error getting response:', error);
       
       const errorMessage = {
         id: Date.now() + 1,
-        text: "Sorry, I'm having trouble processing your request right now. Please try again!",
+        text: "Sorry, I'm having trouble right now. Please try again! 🔄",
         sender: 'bot',
         timestamp: new Date().toLocaleTimeString()
       };
@@ -79,13 +75,25 @@ const ChatInterface = () => {
     }
   };
 
-  // Check API key status
+  // Enhanced API key validation
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
   const hasValidApiKey = apiKey && 
                         apiKey !== 'undefined' && 
                         apiKey !== 'null' &&
-                        apiKey.trim().length > 0 &&
+                        apiKey.trim().length > 20 &&
                         apiKey.startsWith('sk-');
+
+  // Show API key status in development
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('🔧 ChatInterface Debug:', {
+        hasApiKey: !!apiKey,
+        keyLength: apiKey?.length || 0,
+        keyValid: hasValidApiKey,
+        keyPrefix: apiKey?.substring(0, 10) || 'none'
+      });
+    }
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -97,7 +105,7 @@ const ChatInterface = () => {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">FloatChat</h2>
               <p className="text-sm text-gray-500">
-                {hasValidApiKey ? 'AI-Powered Assistant' : 'Basic Mode'}
+                {hasValidApiKey ? '🤖 AI-Powered Assistant' : '🔧 Basic Mode'}
               </p>
             </div>
           </div>
@@ -110,8 +118,8 @@ const ChatInterface = () => {
               </div>
             ) : (
               <div className="flex items-center text-amber-600">
-                <AlertCircle className="w-4 h-4 mr-1" />
-                <span className="text-xs">Basic Mode</span>
+                <Key className="w-4 h-4 mr-1" />
+                <span className="text-xs">API Key Needed</span>
               </div>
             )}
           </div>
@@ -119,9 +127,26 @@ const ChatInterface = () => {
         
         {/* Debug info in development */}
         {import.meta.env.DEV && (
-          <div className="mt-2 text-xs text-gray-400 font-mono">
-            Mode: {import.meta.env.MODE} | 
-            API Key: {apiKey ? `${apiKey.substring(0, 7)}...` : 'Not set'}
+          <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600 font-mono">
+            <div>🔧 Debug Mode: {import.meta.env.MODE}</div>
+            <div>🔑 API Key: {apiKey ? `${apiKey.substring(0, 10)}...` : 'Not configured'}</div>
+            <div>✅ Valid: {hasValidApiKey ? 'Yes' : 'No'}</div>
+          </div>
+        )}
+
+        {/* API Key Instructions */}
+        {!hasValidApiKey && (
+          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <p className="font-medium">API Key Required for Full AI Features</p>
+                <p className="text-xs mt-1">
+                  Add your OpenAI API key to environment variables to unlock intelligent responses.
+                  Currently running in basic mode with limited capabilities.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>

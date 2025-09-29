@@ -1,11 +1,17 @@
 // AI-powered response generator for FloatChat using OpenAI API
 
-// Debug environment variables
-console.log('Environment check:', {
-  NODE_ENV: import.meta.env.MODE,
+// Enhanced environment debugging
+const envDebug = {
+  mode: import.meta.env.MODE,
+  dev: import.meta.env.DEV,
+  prod: import.meta.env.PROD,
   hasApiKey: !!import.meta.env.VITE_OPENAI_API_KEY,
-  keyPrefix: import.meta.env.VITE_OPENAI_API_KEY?.substring(0, 7) + '...'
-});
+  keyLength: import.meta.env.VITE_OPENAI_API_KEY?.length || 0,
+  keyPrefix: import.meta.env.VITE_OPENAI_API_KEY?.substring(0, 7) || 'none',
+  allViteVars: Object.keys(import.meta.env).filter(key => key.startsWith('VITE_'))
+};
+
+console.log('🔧 FloatChat Environment Debug:', envDebug);
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 const API_URL = 'https://api.openai.com/v1/chat/completions';
@@ -18,7 +24,7 @@ const fallbackResponses = {
   apiKeyInvalid: "My API key seems to be invalid. I'll use basic responses for now."
 };
 
-// System prompt to define FloatChat's personality and capabilities
+// System prompt to define FloatChat's personality
 const SYSTEM_PROMPT = `You are FloatChat, a helpful and friendly AI assistant created by The OOPeratives team. 
 
 Your personality:
@@ -39,15 +45,27 @@ If you don't know something, be honest about it and suggest alternatives when po
 
 // Validate API key format
 function isValidApiKey(key) {
-  return key && 
+  const isValid = key && 
          typeof key === 'string' && 
-         key.trim().length > 0 && 
+         key.trim().length > 20 && 
          key !== 'undefined' && 
          key !== 'null' &&
          key.startsWith('sk-');
+  
+  console.log('🔑 API Key Validation:', {
+    hasKey: !!key,
+    isString: typeof key === 'string',
+    length: key?.length || 0,
+    startsWithSk: key?.startsWith('sk-') || false,
+    isValid
+  });
+  
+  return isValid;
 }
 
 export const getFloatChatResponse = async (message, conversationHistory = []) => {
+  console.log('💬 Processing message:', { message, historyLength: conversationHistory.length });
+  
   // Safely handle message input
   if (!message || typeof message !== 'string' || !message.trim()) {
     return "I didn't catch that. What would you like to talk about?";
@@ -55,7 +73,7 @@ export const getFloatChatResponse = async (message, conversationHistory = []) =>
 
   // Check if API key is available and valid
   if (!isValidApiKey(OPENAI_API_KEY)) {
-    console.warn('OpenAI API key not found or invalid. Using fallback responses.');
+    console.warn('⚠️ OpenAI API key not found or invalid. Using fallback responses.');
     return getFallbackResponse(message);
   }
 
@@ -68,7 +86,7 @@ export const getFloatChatResponse = async (message, conversationHistory = []) =>
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
       ...recentHistory
-        .filter(msg => msg && msg.text && msg.sender) // Filter out invalid messages
+        .filter(msg => msg && msg.text && msg.sender)
         .map(msg => ({
           role: msg.sender === 'user' ? 'user' : 'assistant',
           content: String(msg.text).trim()
@@ -76,7 +94,7 @@ export const getFloatChatResponse = async (message, conversationHistory = []) =>
       { role: 'user', content: String(message).trim() }
     ];
 
-    console.log('Making API request to OpenAI...');
+    console.log('🚀 Making API request to OpenAI...', { messageCount: messages.length });
     
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -96,123 +114,133 @@ export const getFloatChatResponse = async (message, conversationHistory = []) =>
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`API request failed: ${response.status} ${response.statusText}`, errorText);
+      console.error('❌ API request failed:', response.status, response.statusText, errorText);
       
       if (response.status === 401) {
-        return fallbackResponses.apiKeyInvalid;
+        return "🔑 My API key seems to be invalid. I'll use basic responses for now.";
       } else if (response.status === 429) {
-        return "I'm getting a lot of requests right now. Please try again in a moment!";
+        return "⏳ I'm getting a lot of requests right now. Please try again in a moment!";
+      } else if (response.status === 503) {
+        return "🔧 OpenAI's servers are temporarily unavailable. Let me help with a basic response instead.";
       }
       
       throw new Error(`API request failed: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
-    console.log('API response received successfully');
+    console.log('✅ API response received successfully');
     
     if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
       return String(data.choices[0].message.content).trim();
     } else {
-      console.error('Unexpected API response format:', data);
+      console.error('❌ Unexpected API response format:', data);
       throw new Error('Unexpected API response format');
     }
 
   } catch (error) {
-    console.error('OpenAI API Error:', error);
+    console.error('💥 OpenAI API Error:', error);
     
     // Network errors
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      return "I'm having connection issues. Let me try to help with a basic response: " + getFallbackResponse(message);
+      return "🌐 I'm having connection issues. Let me try to help with a basic response: " + getFallbackResponse(message);
     }
     
     return fallbackResponses.error;
   }
 };
 
-// Enhanced fallback function for when API is unavailable
+// Enhanced fallback function
 function getFallbackResponse(message) {
-  // Safely handle message input
   if (!message || typeof message !== 'string') {
     return fallbackResponses.greeting;
   }
 
   const userMessage = String(message).toLowerCase().trim();
   
-  // Basic pattern matching for common queries
+  // Greeting responses
   if (userMessage.includes('hello') || userMessage.includes('hi') || userMessage.includes('hey')) {
     const greetings = [
-      fallbackResponses.greeting,
-      "Hi there! I'm in basic mode right now, but I can still chat with you!",
-      "Hey! Good to see you. I'm running with limited capabilities, but let's talk!"
+      "Hello! 👋 I'm FloatChat running in basic mode. I can still help with math, time, and simple conversations!",
+      "Hi there! 😊 I'm currently offline from my AI brain, but I can still chat with you!",
+      "Hey! 🤖 Good to see you. I'm running with limited capabilities, but let's talk!"
     ];
     return greetings[Math.floor(Math.random() * greetings.length)];
   }
   
+  // Math calculations
   if (userMessage.includes('calculate') || userMessage.includes('math') || /\d+[\+\-\*\/]\d+/.test(userMessage)) {
     return handleBasicMath(userMessage);
   }
   
+  // Time and date
   if (userMessage.includes('time') || userMessage.includes('date') || userMessage.includes('today')) {
     const now = new Date();
-    const options = { 
-      weekday: 'long', 
+    return `🕐 Current time: ${now.toLocaleString('en-US', {
+      weekday: 'long',
       year: 'numeric', 
-      month: 'long', 
+      month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    };
-    return `The current date and time is: ${now.toLocaleDateString('en-US', options)}`;
+    })}`;
   }
   
+  // Help
   if (userMessage.includes('help') || userMessage.includes('what can you do')) {
-    return `I'm currently in basic mode, but I can still help with:
-• Basic math calculations (try "15 + 25")
-• Tell you the current time and date
-• Have simple conversations
-• Answer basic questions
+    return `🤖 I'm currently in basic mode, but I can still help with:
 
-My full AI capabilities will return once the API connection is restored!`;
+• 🧮 Basic math calculations (try "15 + 25")
+• 🕐 Current time and date
+• 💬 Simple conversations  
+• ❓ Basic questions
+
+💡 To unlock my full AI capabilities, an OpenAI API key needs to be configured!
+
+What would you like to try?`;
   }
 
+  // Programming questions
+  if (userMessage.includes('programming') || userMessage.includes('code') || userMessage.includes('javascript') || userMessage.includes('react')) {
+    return "💻 I'd love to help with programming! While I'm in basic mode, I can still discuss general concepts. What are you working on?";
+  }
+
+  // Thank you
   if (userMessage.includes('thank') || userMessage.includes('thanks')) {
-    return "You're welcome! Happy to help however I can, even in basic mode.";
+    return "😊 You're very welcome! Happy to help however I can, even in basic mode!";
   }
 
+  // Goodbye
   if (userMessage.includes('bye') || userMessage.includes('goodbye')) {
-    return "Goodbye! Thanks for chatting with FloatChat. Hope to see you again soon!";
+    return "👋 Goodbye! Thanks for chatting with FloatChat. Hope to see you again soon!";
   }
 
+  // API questions
   if (userMessage.includes('api') || userMessage.includes('key') || userMessage.includes('openai')) {
-    return "I'm currently running without my AI API connection. To enable full AI capabilities, an OpenAI API key would need to be configured. For now, I'm happy to help with basic responses!";
-  }
-  
-  // Contextual responses based on content
-  if (userMessage.includes('programming') || userMessage.includes('code')) {
-    return "I'd love to help with programming questions! While I'm in basic mode, I can still discuss general programming concepts. What are you working on?";
+    return "🔑 I'm currently running without my AI API connection. To enable full AI capabilities, an OpenAI API key would need to be configured in the environment variables. For now, I'm happy to help with basic responses!";
   }
 
+  // Weather
   if (userMessage.includes('weather')) {
-    return "I can't check the weather right now, but I'd recommend checking your local weather app or website for current conditions!";
+    return "🌤️ I can't check the weather right now, but I'd recommend checking your local weather app for current conditions!";
   }
   
-  // Default fallback responses
+  // Default responses
   const defaults = [
-    "That's interesting! I'm in basic mode right now, so I might not have the perfect answer, but I'm happy to chat about it.",
-    "I'm running with limited capabilities at the moment, but I'd love to hear more about what you're thinking!",
-    "While I'm in offline mode, I can still have a conversation! Tell me more about that.",
-    "I'm currently using basic responses, but I'm here to chat! What would you like to talk about?",
-    "My full AI brain isn't available right now, but I can still try to help! Can you tell me more?"
+    "🤔 That's interesting! I'm in basic mode right now, so I might not have the perfect answer, but I'm happy to chat about it.",
+    "💭 I'm running with limited capabilities at the moment, but I'd love to hear more about what you're thinking!",
+    "🗣️ While I'm in offline mode, I can still have a conversation! Tell me more about that.",
+    "🤖 I'm currently using basic responses, but I'm here to chat! What would you like to talk about?",
+    "💡 My full AI brain isn't available right now, but I can still try to help! Can you tell me more?"
   ];
   
   return defaults[Math.floor(Math.random() * defaults.length)];
 }
 
-// Enhanced math handler for fallback mode
+// Enhanced math handler
 function handleBasicMath(message) {
   try {
     if (!message || typeof message !== 'string') {
-      return "I can help with basic math operations. Try something like '15 + 25' or '10 * 3'.";
+      return "🧮 I can help with basic math operations. Try something like '15 + 25' or '10 * 3'.";
     }
 
     // Handle multiple operations
@@ -225,9 +253,7 @@ function handleBasicMath(message) {
         const a = parseFloat(num1);
         const b = parseFloat(num2);
         
-        if (isNaN(a) || isNaN(b)) {
-          return null;
-        }
+        if (isNaN(a) || isNaN(b)) return null;
         
         let result;
         switch (operator) {
@@ -235,7 +261,7 @@ function handleBasicMath(message) {
           case '-': result = a - b; break;
           case '*': result = a * b; break;
           case '/': 
-            if (b === 0) return `${a} ÷ ${b} = Cannot divide by zero!`;
+            if (b === 0) return `${a} ÷ ${b} = ❌ Cannot divide by zero!`;
             result = a / b; 
             break;
           default: return null;
@@ -245,15 +271,15 @@ function handleBasicMath(message) {
       }).filter(Boolean);
       
       if (results.length > 0) {
-        return "Here's your calculation:\n" + results.join('\n');
+        return "🧮 Here's your calculation:\n" + results.join('\n');
       }
     }
 
-    // Handle special math requests
+    // Special math functions
     if (userMessage.includes('square root')) {
       const num = parseFloat(message.match(/\d+(?:\.\d+)?/)?.[0]);
       if (!isNaN(num) && num >= 0) {
-        return `The square root of ${num} is ${Math.sqrt(num).toFixed(2)}`;
+        return `🔢 The square root of ${num} is ${Math.sqrt(num).toFixed(2)}`;
       }
     }
 
@@ -263,7 +289,7 @@ function handleBasicMath(message) {
         const base = parseFloat(powerMatch[1]);
         const exponent = parseFloat(powerMatch[2]);
         if (!isNaN(base) && !isNaN(exponent)) {
-          return `${base} to the power of ${exponent} = ${Math.pow(base, exponent)}`;
+          return `🔢 ${base} to the power of ${exponent} = ${Math.pow(base, exponent)}`;
         }
       }
     }
@@ -272,5 +298,13 @@ function handleBasicMath(message) {
     console.error('Math calculation error:', error);
   }
   
-  return "I can help with basic math operations like:\n• Addition: 15 + 25\n• Subtraction: 50 - 12\n• Multiplication: 8 * 7\n• Division: 100 / 4\n• Square root: square root of 16\n• Powers: 2 ^ 3\n\nWhat would you like to calculate?";
+  return `🧮 I can help with basic math operations like:
+• Addition: 15 + 25
+• Subtraction: 50 - 12  
+• Multiplication: 8 * 7
+• Division: 100 / 4
+• Square root: square root of 16
+• Powers: 2 ^ 3
+
+What would you like to calculate?`;
 }
